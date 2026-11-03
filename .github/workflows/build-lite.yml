@@ -1,0 +1,46 @@
+name: Build SCInsta Lite library (no Instagram IPA)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: theos/theos
+          ref: 6e7b8c40e0f5f9f5b2377800dc1e42cd2560d24a
+          path: toolchain/theos
+          submodules: recursive
+          persist-credentials: false
+      - name: Install signing utility
+        run: brew install ldid
+      - name: Pin upstream-compatible Logos
+        run: |
+          git -C toolchain/theos/vendor/logos fetch --depth=1 origin a62370066a97e36d59b200a9fa10c5091f5e8972
+          git -C toolchain/theos/vendor/logos checkout a62370066a97e36d59b200a9fa10c5091f5e8972
+      - name: Compile using runner Apple SDK
+        env:
+          THEOS: ${{ github.workspace }}/toolchain/theos
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s lite -p test_check_ipa.py -v
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          make -C lite FINALPACKAGE=1 DEBUG=0
+          mkdir -p dist
+          find lite/.theos/obj -name SCInstaLite.dylib -type f -print
+          cp lite/.theos/obj/SCInstaLite.dylib dist/
+          cp LICENSE lite/README.md dist/
+          shasum -a 256 dist/SCInstaLite.dylib > dist/SHA256SUMS.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: SCInstaLite-library
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
